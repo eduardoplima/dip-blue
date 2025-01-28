@@ -1,14 +1,18 @@
 from typing import List
 from typing import Optional
-from sqlalchemy import ForeignKey
-from sqlalchemy import String
+
+from sqlalchemy import ForeignKey, String, Column, Integer, Table
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 
+from .db import metadata, engine_dip, engine_processo
+
 class Base(DeclarativeBase):
     pass
+
+Processos = Table("Processos", metadata, autoload_with=engine_processo)
 
 class Decisao(Base):
     __tablename__ = "Decisoes"
