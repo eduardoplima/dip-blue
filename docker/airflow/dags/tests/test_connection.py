@@ -11,6 +11,6 @@ def test_connection():
     engine.dispose()
 
 def test_processos():
-    processo = Processos.select().where(Processos.c.AnoProcesso == '2024').execute().fetchone()
+    processo = Processos.select().where(Processos.c.Ano_Processo == '2024').execute().fetchone()
     assert processo is not None
 
