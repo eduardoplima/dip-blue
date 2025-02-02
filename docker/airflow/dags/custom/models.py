@@ -1,55 +1,45 @@
 from typing import List
 from typing import Optional
 
-from sqlalchemy import ForeignKey, String, Column, Integer, Table, Text
+from sqlalchemy import ForeignKey, String, Integer, Table, Text, Boolean
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 
-from .db import metadata, engine_dip, engine_processo, engine_bdc
+from db import metadata, engine_dip, engine_processo, engine_bdc
 
-class Base(DeclarativeBase):
+class BaseDip(DeclarativeBase):
     pass
 
 Processo = Table("Processos", metadata, autoload_with=engine_processo)
-Debito = Table("Exe_debito", metadata, autoload_with=engine_processo)
-Orgao = Table("Gen_Orgao", metadata, autoload_with=engine_bdc)
+Decisao = Table("vwDecisao", BaseDip.metadata, autoload_with=engine_dip)
+Debito = Table("Exe_Debito", metadata, autoload_with=engine_processo)
+#Orgao = Table("Gen_Orgao", metadata, autoload_with=engine_processo)
 
-class Decisao(Base):
-    __tablename__ = "Decisao"
-    IdDecisao: Mapped[int] = mapped_column(primary_key=True)
-    NumeroProcesso: Mapped[str] = mapped_column(String(6))
-    AnoProcesso: Mapped[str] = mapped_column(String(4))
-    DataDecisao: Mapped[str] = mapped_column(String(10))
-    DescricaoDecisao: Mapped[str] = mapped_column(String(100))
-    IdProcesso: Mapped[int] = mapped_column(ForeignKey("Processos.IdProcesso"))
-    Evento: Mapped[int] = mapped_column(Integer)
-    CaminhoArquivo: Mapped[str] = mapped_column(String(100))
-    TextoArquivo: Mapped[str] = mapped_column(Text)
-    def __repr__(self) -> str:
-        return f"Decisao (NumeroProcesso={self.NumeroProcesso!r}, AnoProcesso={self.AnoProcesso!r}, DataDecisao={self.DataDecisao!r}, IdProcesso={self.IdProcesso!r})"
-
-class Obrigacao(Base):
+class Obrigacao(BaseDip):
     __tablename__ = "Obrigacao"
     IdObrigacao: Mapped[int] = mapped_column(primary_key=True)
-    IdDecisao: Mapped[int] = mapped_column(ForeignKey("Decisoes.IdDecisao"))
-    DataVencimento: Mapped[str] = mapped_column(String(10))
+    IdDecisao: Mapped[int] = mapped_column(Integer)
+    Prazo: Mapped[str] = mapped_column(Text)
     Descricao: Mapped[str] = mapped_column(Text)
+    OrgaoResponsavel: Mapped[str] = mapped_column(Text)
+    Processado: Mapped[Optional[bool]] = mapped_column(Boolean)
+    Validado: Mapped[Optional[bool]] = mapped_column(Boolean)
     def __repr__(self) -> str:
         return f"Obrigacao (IdDecisao={self.IdDecisao!r}, Descricao={self.Descricao!r})"
     
-class Monitoramento(Base):
+class Monitoramento(BaseDip):
     __tablename__ = "Monitoramento"
     IdMonitoramento: Mapped[int] = mapped_column(primary_key=True)
-    IdDecisao: Mapped[int] = mapped_column(ForeignKey("Decisoes.IdDecisao"))
+    IdDecisao: Mapped[int] = mapped_column(Integer)
     DataMonitoramento: Mapped[str] = mapped_column(String(10))
     Descricao: Mapped[str] = mapped_column(Text)
     Irregularidades: Mapped[List[Optional["Irregularidade"]]] = relationship("Irregularidade")
     def __repr__(self) -> str:
         return f"Monitoramento (IdDecisao={self.IdDecisao!r}, Descricao={self.Descricao!r})"
     
-class Irregularidade(Base):
+class Irregularidade(BaseDip):
     __tablename__ = "Irregularidade"
     IdIrregularidade: Mapped[int] = mapped_column(primary_key=True)
     IdMonitoramento: Mapped[int] = mapped_column(ForeignKey("Monitoramento.IdMonitoramento"))
