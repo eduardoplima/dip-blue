@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
 from ..custom.models import Decisao, Obrigacao
-from ..custom.db import create_engine_db
 from ..custom.llm_utils import classificar_determinacao_outro, classificar_itens_decisao, ObrigacaoPydantic
 
 from ..custom.hooks import DecisaoHook
@@ -78,8 +77,35 @@ def test_decisao(llm):
 
     classificar_determinacao_outro
 
+@pytest.fixture
+def informacoes_dir():
+    return "/mnt/informacoes_pdf/"
 
+@pytest.fixture
+def openai_key():
+    load_dotenv('.env')
+    return os.getenv('OPENAI_API_KEY')
 
-    
+@pytest.fixture
+def sql_connection():
+    load_dotenv('.env')
+    db_user = os.getenv('SQLSERVER_USER')
+    db_pass = os.getenv('SQLSERVER_PASS')
+    db_host = os.getenv('SQLSERVER_HOST')
+    db_port = os.getenv('SQLSERVER_PORT')
+
+    return pymssql.connect(server=db_host, user=db_user, password=db_pass, port=db_port)
+
+def test_operator(mocker, informacoes_dir, openai_key, sql_connection):
+    os.chdir('/home/eduardo/Dev/dip-blue/docker/airflow/dags/')
+    mocker.patch.object(DecisaoOperator, 'get_informacoes_dir', return_value=informacoes_dir)
+    mocker.patch.object(DecisaoOperator, 'get_openai_key', return_value=openai_key)
+    mocker.patch.object(DecisaoHook, 'get_conn_dip', return_value=sql_connection)
+
+    operator = DecisaoOperator(task_id="decisao_operator")
+
+    r = operator.execute('2024-01-01', '2024-02-01', None)
+
+    assert r is None
 
     

@@ -9,17 +9,18 @@ from airflow.utils.decorators import apply_defaults
 
 from langchain_openai import ChatOpenAI
 
-from .db import create_engine_db
 from .llm_utils import classificar_determinacao_outro, classificar_itens_decisao, ObrigacaoPydantic
-from .models import Decisao, Obrigacao
+from .models import Decisao, Obrigacao, Table, BaseDip
 from .hooks import DecisaoHook
   
 class DecisaoOperator(BaseOperator):
-    def __init__(self, pdf_dir, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super(DecisaoOperator, self).__init__(*args, **kwargs)
         self.llm = self.get_llm()
-        self.pdf_dir = pdf_dir
         self.hook = DecisaoHook()
+
+    def get_decisao_table(self):
+        return Table("vwDecisao", BaseDip.metadata, autoload_with=self.hook)
 
     def get_openai_key(self):
         return Variable.get("openai_key")
@@ -31,7 +32,7 @@ class DecisaoOperator(BaseOperator):
         return ChatOpenAI(temperature=0, model_name='gpt-4o', api_key=self.get_openai_key())
 
     def save_decisao(self, decisao):
-        with Session(create_engine_db(db_name='BdDIP')) as session:
+        with Session(self.hook.get_engine_dip()) as session:
             llm = self.llm
             
             reader = PyPDF2.PdfFileReader(pathlib.Path(self.get_informacoes_dir()) / decisao.Arquivo)
