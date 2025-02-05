@@ -3,16 +3,17 @@ import pytest
 import PyPDF2
 import pymssql
 
+from airflow.models import Connection
+
 from langchain_openai import ChatOpenAI
 
 from sqlalchemy import select
 from sqlalchemy import create_engine, MetaData
-
 from sqlalchemy.orm import Session
 
 from dotenv import load_dotenv
 
-from ..custom.models import Decisao, Obrigacao
+from ..custom.models import Obrigacao
 from ..custom.llm_utils import classificar_determinacao_outro, classificar_itens_decisao, ObrigacaoPydantic
 
 from ..custom.hooks import DecisaoHook
@@ -40,43 +41,6 @@ def llm():
     load_dotenv('.env')
     return ChatOpenAI(temperature=0, model_name='gpt-4o')
 
-@pytest.mark.skip
-def test_decisao(llm):
-    with Session(create_engine_db(db_name='BdDIP')) as session:
-        result = session.execute(select(Decisao).where(Decisao.c.ano_processo == '2024'))
-        decisao = result.fetchone()
-        assert decisao is not None
-
-        reader = PyPDF2.PdfReader('relatorio_teste.pdf')
-        text = ''
-
-        for page in reader.pages:
-            text += page.extract_text()
-
-        is_decisao = classificar_determinacao_outro(text, llm) == 'DETERMINACAO'
-
-        if is_decisao:
-            r = classificar_itens_decisao(text, llm)
-
-        determinacoes = r.determinacoes
-        obrigacoes = []
-
-        for determinacao in determinacoes:
-            if type(determinacao) == ObrigacaoPydantic:
-                obrigacoes.append(determinacao)
-
-        for obrigacao in obrigacoes:
-            o = Obrigacao(IdDecisao=decisao.IdInformacao, 
-                        Prazo=obrigacao.prazo_obrigacao, 
-                        Descricao=obrigacao.descricao, 
-                        OrgaoResponsavel=obrigacao.orgao_responsavel)
-            session.add(o)
-        
-        session.commit()
-
-
-    classificar_determinacao_outro
-
 @pytest.fixture
 def informacoes_dir():
     return "/mnt/informacoes_pdf/"
@@ -94,7 +58,7 @@ def sql_connection():
     db_host = os.getenv('SQLSERVER_HOST')
     db_port = os.getenv('SQLSERVER_PORT')
 
-    return pymssql.connect(server=db_host, user=db_user, password=db_pass, port=db_port)
+    return Connection(host=db_host, login=db_user, password=db_pass, port=db_port)
 
 def test_operator(mocker, informacoes_dir, openai_key, sql_connection):
     os.chdir('/home/eduardo/Dev/dip-blue/docker/airflow/dags/')

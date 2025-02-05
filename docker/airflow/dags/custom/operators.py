@@ -10,7 +10,7 @@ from airflow.utils.decorators import apply_defaults
 from langchain_openai import ChatOpenAI
 
 from .llm_utils import classificar_determinacao_outro, classificar_itens_decisao, ObrigacaoPydantic
-from .models import Decisao, Obrigacao, Table, BaseDip
+from .models import Obrigacao, Table, BaseDip
 from .hooks import DecisaoHook
   
 class DecisaoOperator(BaseOperator):
@@ -18,9 +18,6 @@ class DecisaoOperator(BaseOperator):
         super(DecisaoOperator, self).__init__(*args, **kwargs)
         self.llm = self.get_llm()
         self.hook = DecisaoHook()
-
-    def get_decisao_table(self):
-        return Table("vwDecisao", BaseDip.metadata, autoload_with=self.hook)
 
     def get_openai_key(self):
         return Variable.get("openai_key")
@@ -67,15 +64,18 @@ class DecisaoOperator(BaseOperator):
         for decisao in decisoes:
             llm = self.llm
             
-            reader = PyPDF2.PdfFileReader(pathlib.Path(self.get_informacoes_dir()) / decisao.Arquivo)
+            reader = PyPDF2.PdfReader(pathlib.Path(self.get_informacoes_dir()) / decisao.arquivo)
             text = ''
             for page in reader.pages:
                 text += page.extract_text()
 
             is_decisao = classificar_determinacao_outro(text, llm) == 'DETERMINACAO'
 
+            r = None
             if is_decisao:
                 r = classificar_itens_decisao(text, llm)
+            else:
+                continue
 
             determinacoes = r.determinacoes
             obrigacoes = []

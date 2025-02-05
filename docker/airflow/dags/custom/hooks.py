@@ -2,12 +2,10 @@ import datetime
 
 from airflow.hooks.base import BaseHook
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select, Table
 from sqlalchemy.orm import Session
 
-from sqlalchemy import select
-
-from .models import Decisao, Obrigacao
+from .models import Obrigacao, BaseDip
 
 class DecisaoHook(BaseHook):
     def __init__(self):
@@ -27,9 +25,14 @@ class DecisaoHook(BaseHook):
         return create_engine(sql_str)
 
     def get_decisoes(self, data_inicio: datetime.datetime, data_fim: datetime.datetime):
+        Decisao = self.get_decisao_table()
+
         with Session(self.get_engine_dip()) as session:
-            result = session.execute(select(Decisao).where(Decisao.c.DataPublicacao >= data_inicio).where(Decisao.c.DataPublicacao <= data_fim))
+            result = session.execute(select(Decisao).where(Decisao.c.datapublicacao >= data_inicio).where(Decisao.c.datapublicacao <= data_fim))
             return result.fetchall()
+        
+    def get_decisao_table(self):
+        return Table("vwDecisao", BaseDip.metadata, autoload_with=self.get_engine_dip())
         
     def save_obrigacao(self, obrigacao: Obrigacao):
         sql_str = "mssql+pymssql://%s:%s@%s:%s/%s" % (self.conn_dip.login,  self.conn_dip.password, self.conn_dip.host, self.conn_dip.port, 'BdDIP')

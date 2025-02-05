@@ -8,7 +8,7 @@ from sqlalchemy.orm import relationship
 
 BaseDip = declarative_base()
 
-Decisao = Table("vwDecisao", BaseDip.metadata)
+
 
 class Obrigacao(BaseDip):
     __tablename__ = "Obrigacao"
