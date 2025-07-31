@@ -8,7 +8,6 @@ from models import ObrigacaoORM, get_db
 from dotenv import load_dotenv
 
 load_dotenv() 
-# --- Interface do Streamlit ---
 st.set_page_config(page_title="Cadastro de Obrigação", layout="centered")
 
 st.title("Sistema de Cadastro de Obrigação")

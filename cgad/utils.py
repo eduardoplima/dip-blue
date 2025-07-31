@@ -4,6 +4,7 @@ from langchain_openai import  AzureChatOpenAI, ChatOpenAI
 from dotenv import load_dotenv
 
 from schema import Obrigacao
+from models import ObrigacaoORM
 
 load_dotenv()  # Carrega variáveis de ambiente do arquivo .env
 
