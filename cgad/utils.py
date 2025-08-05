@@ -3,8 +3,10 @@ import pandas as pd
 from langchain_openai import  AzureChatOpenAI, ChatOpenAI
 from dotenv import load_dotenv
 
-from schema import Obrigacao
-from models import ObrigacaoORM
+from tools.schema import Obrigacao, NERDecisao
+from tools.models import ObrigacaoORM
+
+from tools.prompt import generate_few_shot_ner_prompts
 
 load_dotenv()  # Carrega variáveis de ambiente do arquivo .env
 
@@ -13,7 +15,8 @@ def get_chat_model():
     deployment_name="gpt-4-turbo",
     model_name="gpt-4")
 
-extractor_obrigacao_gpt4turbo = get_chat_model().with_structured_output(Obrigacao, include_raw=False, method="json_schema")
+extractor_obrigacao = get_chat_model().with_structured_output(Obrigacao, include_raw=False, method="json_schema")
+extractor_decisao = get_chat_model().with_structured_output(NERDecisao, include_raw=False, method="json_schema")
 
 def safe_int(value):
     if pd.isna(value):
@@ -82,7 +85,11 @@ def get_prompt_obrigacao(row, obrigacao):
 
 def extract_obrigacao(row, obrigacao):
     prompt_obrigacao = get_prompt_obrigacao(row, obrigacao)
-    return extractor_obrigacao_gpt4turbo.invoke(prompt_obrigacao)
+    return extractor_obrigacao.invoke(prompt_obrigacao)
+
+def extract_decisao_ner(acordao):
+    prompt_decisao = generate_few_shot_ner_prompts(acordao)
+    return extractor_decisao.invoke(prompt_decisao)
 
 def insert_obrigacao(db_session, obrigacao: Obrigacao, row):
     orm_obj = ObrigacaoORM(
