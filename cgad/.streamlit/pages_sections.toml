@@ -1,0 +1,9 @@
+[[pages]]
+path = "app.py"
+name = "Pagina Inicial"
+icon = "🏠"
+
+[[pages]]
+path = "pages/cgr.py"
+name = "Cadastro Geral de Recomendações"
+icon = "📝"

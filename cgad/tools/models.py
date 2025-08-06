@@ -176,6 +176,24 @@ class DecisaoORM(BaseProcesso):
     SetorVoto = Column(String(255))
     DescricaoTipoVoto = Column(String(255))
 
+class RecomendacaoORM(BaseDIP):
+    __tablename__ = "Recomendacao"
+
+    IdRecomendacao = Column(Integer, primary_key=True, index=True)
+    IdProcesso = Column(Integer, nullable=False)
+    IdComposicaoPauta = Column(Integer, nullable=False)
+    IdVotoPauta = Column(Integer, nullable=False)
+    DescricaoRecomendacao = Column(Text, nullable=True)
+    PrazoCumprimentoRecomendacao = Column(String, nullable=True)
+    DataCumprimentoRecomendacao = Column(Date, nullable=True)
+    NomeResponsavel = Column(String, nullable=True)
+    IdPessoaResponsavel = Column(Integer, nullable=True)
+    OrgaoResponsavel = Column(String, nullable=True)
+    IdOrgaoResponsavel = Column(Integer, nullable=True)
+
+    def __repr__(self):
+        return f"<Recomendacao(IdRecomendacao={self.IdRecomendacao}, descricao_recomendacao='{self.descricao_recomendacao[:30]}...')>"
+
 SessionLocal_DIP = sessionmaker(autocommit=False, autoflush=False, bind=engine_dip)
 SessionLocal_Processo = sessionmaker(autocommit=False, autoflush=False, bind=engine_processo)
 

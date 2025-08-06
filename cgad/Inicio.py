@@ -18,10 +18,9 @@ st.markdown("---")
 st.subheader("Funcionalidades")
 
 # Botão para a página de Cadastro de Obrigação
-st.page_link("pages/cad_obrigacao.py", label="Cadastro de Obrigação", icon="📝")
+st.page_link("pages/CGR.py", label="Cadastro Geral de Recomendações (CGR - Recomendações)", icon="📝")
 
-# Botão para a página de Cadastro de Recomendação
-st.page_link("pages/cad_recomendacao.py", label="Cadastro de Recomendação", icon="💡")
+
 
 st.markdown("---")
 

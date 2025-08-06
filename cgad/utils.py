@@ -49,11 +49,11 @@ def get_pessoas_str(pessoas):
     
     return ", ".join(pessoas_str)
 
-def get_prompt_obrigacao(row, obrigacao):
-    data_sessao = row['data_sessao']
-    texto_acordao = row['texto_acordao']
-    orgao_responsavel = row['orgao_responsavel']
-    pessoas_responsaveis = row['responsaveis']
+def get_prompt_obrigacao(contexto, obrigacao):
+    data_sessao = contexto['data_sessao']
+    texto_acordao = contexto['texto_acordao']
+    orgao_responsavel = contexto['orgao_responsavel']
+    pessoas_responsaveis = contexto['responsaveis']
 
 
     return f"""
@@ -81,6 +81,34 @@ def get_prompt_obrigacao(row, obrigacao):
 
     Use somente as informações do texto do acórdão e dos dados fornecidos. Não inclua informações adicionais ou suposições.
     Se o órgão responsável não estiver disponível, preencha o campo orgão_responsavel com "Desconhecido".
+    """
+
+from datetime import date
+
+def get_prompt_recomendacao(contexto, recomendacao):
+    data_sessao = contexto['data_sessao']
+    texto_acordao = contexto['texto_acordao']
+    orgao_responsavel = contexto['orgao_responsavel']
+    pessoas_responsaveis = contexto['responsaveis']
+
+    return f"""
+    Você é um Auditor de Controle Externo do TCE/RN. Sua tarefa é analisar o voto e extrair a recomendação proferida, preenchendo os campos do objeto Recomendacao.
+
+    Data da Sessão: {data_sessao.strftime('%d/%m/%Y')}
+    Recomendação detectada: {recomendacao.descricao_recomendacao}
+    Texto do Acordão: {texto_acordao}
+    Órgão Responsável: {orgao_responsavel}
+    Pessoas Responsáveis: {get_pessoas_str(pessoas_responsaveis)}
+
+    Dado esse contexto, preencha os campos da seguinte forma:
+    - descricao_recomendacao: Descrição da recomendação proferida.
+    - prazo_cumprimento_recomendacao: Prazo sugerido para adoção da recomendação. Extraia o texto indicando o prazo, se houver. Exemplo: "90 dias".
+    - data_cumprimento_recomendacao: Extraia do prazo do acórdão como data de início e faça o cálculo da data de cumprimento. Exemplo: 2025-09-13
+    - nome_responsavel_recomendacao: Nome do responsável pela recomendação. Pessoa física.
+    - orgao_responsavel_recomendacao: Órgão responsável pela recomendação. Pessoa jurídica.
+
+    Use somente as informações do texto do acórdão e dos dados fornecidos. Não inclua informações adicionais ou suposições.
+    Se o órgão responsável não estiver disponível, preencha o campo orgao_responsavel_recomendacao com "Desconhecido".
     """
 
 def extract_obrigacao(row, obrigacao):

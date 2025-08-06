@@ -1,0 +1,5 @@
+[ui]
+sidebarPages = {
+    "app.py" = "Página Inicial",
+    "cgr.py" = "Cadastro Geral de Recomendações"
+}
