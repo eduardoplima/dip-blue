@@ -1,9 +1,13 @@
+
+import os
+import pymssql
+import datetime
 import pandas as pd
 
 from langchain_openai import  AzureChatOpenAI, ChatOpenAI
 from dotenv import load_dotenv
 
-from tools.schema import Obrigacao, NERDecisao
+from tools.schema import Obrigacao, Recomendacao, NERDecisao
 from tools.models import ObrigacaoORM
 
 from tools.prompt import generate_few_shot_ner_prompts
@@ -17,6 +21,7 @@ def get_chat_model():
 
 extractor_obrigacao = get_chat_model().with_structured_output(Obrigacao, include_raw=False, method="json_schema")
 extractor_decisao = get_chat_model().with_structured_output(NERDecisao, include_raw=False, method="json_schema")
+extractor_recomendacao = get_chat_model().with_structured_output(Recomendacao, include_raw=False, method="json_schema")
 
 def safe_int(value):
     if pd.isna(value):
@@ -49,18 +54,112 @@ def get_pessoas_str(pessoas):
     
     return ", ".join(pessoas_str)
 
-def get_prompt_obrigacao(contexto, obrigacao):
-    data_sessao = contexto['data_sessao']
-    texto_acordao = contexto['texto_acordao']
-    orgao_responsavel = contexto['orgao_responsavel']
-    pessoas_responsaveis = contexto['responsaveis']
+def get_connection():
+    """Establish a connection to the SQL Server database.
+    Returns:
+        pymssql.Connection: A connection object to the SQL Server database.
+    """
+    return pymssql.connect(
+        server=os.getenv('SQL_SERVER_HOST'),
+        user=os.getenv('SQL_SERVER_USER'),
+        password=os.getenv('SQL_SERVER_PASS'),
+        database='processo'
+    )
+
+def get_orgaos():
+    query = f"""
+    SELECT IdOrgao as id, Nome as nome
+    FROM processo.dbo.Orgaos
+    """
+    df_orgaos = pd.read_sql(query, get_connection())
+    if df_orgaos.empty:
+        return None
+    else:
+        df_orgaos['nome'] = df_orgaos['nome'].str.strip()
+        df_orgaos['nome'] = df_orgaos['nome'].str.upper()
+        return df_orgaos
+
+def get_pessoas():
+    query = f"""
+    SELECT DISTINCT gp.IdPessoa as id, gp.Nome as nome
+    FROM processo.dbo.Pro_ProcessosResponsavelDespesa pprd INNER JOIN
+    processo.dbo.GenPessoa gp ON pprd.IdPessoa = gp.IdPessoa 
+    """
+    df_pessoas = pd.read_sql(query, get_connection())
+    if df_pessoas.empty:
+        return None
+    else:
+        df_pessoas['nome'] = df_pessoas['nome'].str.strip()
+        df_pessoas['nome'] = df_pessoas['nome'].str.upper()
+        return df_pessoas
+
+def get_df_decisao(numero_processo, ano_processo):
+    query = f"""
+    SELECT p.idprocesso as id_processo, 
+    NumeroProcesso as numero_processo, 
+    AnoProcesso as ano_processo, 
+    IdComposicaoPauta as id_composicao_pauta, 
+    idVotoPauta as id_voto_pauta,
+    p.Assunto as assunto, 
+    numero_sessao, 
+    ano_sessao, 
+    DataSessao as data_sessao,  
+    Relatorio as relatorio, 
+    FundamentacaoVoto as fundamentacao_voto, 
+    Conclusao as conclusao, 
+    texto_acordao, 
+    o.nome as orgao_responsavel, 
+    o.IdOrgao as id_orgao_responsavel,
+    gp.Nome as nome_responsavel, 
+    gp.Documento as documento_responsavel, 
+    gp.TipoPessoa as tipo_responsavel, 
+    gp.idpessoa as id_pessoa
+    FROM processo.dbo.vw_ia_votos_acordaos_decisoes ia 
+    LEFT JOIN processo.dbo.processos p ON ia.NumeroProcesso = p.numero_processo  AND ia.AnoProcesso = p.ano_processo 
+    LEFT JOIN processo.dbo.Orgaos o ON o.IdOrgao = p.IdOrgaoEnvolvido
+    LEFT JOIN processo.dbo.Pro_ProcessosResponsavelDespesa pprd ON p.IdProcesso = pprd.IdProcesso 
+    LEFT JOIN processo.dbo.GenPessoa gp ON pprd.IdPessoa = gp.IdPessoa 
+    WHERE p.numero_processo = {numero_processo}
+    AND p.ano_processo = {ano_processo}
+    """
+
+    df = pd.read_sql(query, get_connection())
+
+    group_cols = [
+            'id_processo', 'numero_processo', 'ano_processo', 'id_composicao_pauta', 'assunto', 
+            'id_voto_pauta', 'numero_sessao', 'ano_sessao', 'data_sessao', 'relatorio',
+            'fundamentacao_voto', 'conclusao', 'texto_acordao', 'orgao_responsavel', 'id_orgao_responsavel',
+    ]
+
+    # Define as colunas para criar o dicionário de pessoas
+    person_cols = ['nome_responsavel', 'documento_responsavel', 'tipo_responsavel', 'id_pessoa']
+
+    # Agrupa o DataFrame e aplica uma função lambda para criar a lista de dicionários
+    df = df.groupby(group_cols, dropna=False).apply(
+        lambda x: pd.Series({'responsaveis': x[person_cols].apply(
+            lambda y: y.dropna().to_dict(), axis=1
+        ).tolist()})
+    ).reset_index()
+
+
+    df= df[['id_composicao_pauta', 'id_voto_pauta']].merge(df, on=['id_composicao_pauta', 'id_voto_pauta'], how='left')
+    df['data_sessao'] = pd.to_datetime(df['data_sessao'], errors='coerce')
+
+    return df
+
+def get_prompt_obrigacao(contexto, descricao_obrigacao):
+    data_sessao = pd.to_datetime(contexto['data_sessao']).iloc[0]
+    data_sessao = data_sessao.strftime('%d/%m/%Y')
+    texto_acordao = contexto['texto_acordao'].values[0]
+    orgao_responsavel = contexto['orgao_responsavel'].values[0]
+    pessoas_responsaveis = contexto['responsaveis'].values[0]
 
 
     return f"""
     Você é um Auditor de Controle Externo do TCE/RN. Sua tarefa é analisar o voto e extrair a obrigação imposta, preenchendo os campos do objeto Obrigacao.
 
-    Data da Sessão: {data_sessao.strftime('%d/%m/%Y')}
-    Obrigação detectada: {obrigacao.descricao_obrigacao}
+    Data da Sessão: {data_sessao}
+    Obrigação detectada: {descricao_obrigacao}
     Texto do Acordão: {texto_acordao}
     Órgão Responsável: {orgao_responsavel}
     Pessoas Responsáveis: {get_pessoas_str(pessoas_responsaveis)}
@@ -85,17 +184,18 @@ def get_prompt_obrigacao(contexto, obrigacao):
 
 from datetime import date
 
-def get_prompt_recomendacao(contexto, recomendacao):
-    data_sessao = contexto['data_sessao']
-    texto_acordao = contexto['texto_acordao']
-    orgao_responsavel = contexto['orgao_responsavel']
-    pessoas_responsaveis = contexto['responsaveis']
+def get_prompt_recomendacao(contexto, descricao_recomendacao):
+    data_sessao = pd.to_datetime(contexto['data_sessao']).iloc[0]
+    data_sessao = data_sessao.strftime('%d/%m/%Y')
+    texto_acordao = contexto['texto_acordao'].values[0]
+    orgao_responsavel = contexto['orgao_responsavel'].values[0]
+    pessoas_responsaveis = contexto['responsaveis'].values[0]
 
     return f"""
     Você é um Auditor de Controle Externo do TCE/RN. Sua tarefa é analisar o voto e extrair a recomendação proferida, preenchendo os campos do objeto Recomendacao.
 
-    Data da Sessão: {data_sessao.strftime('%d/%m/%Y')}
-    Recomendação detectada: {recomendacao.descricao_recomendacao}
+    Data da Sessão: {data_sessao}
+    Recomendação detectada: {descricao_recomendacao}
     Texto do Acordão: {texto_acordao}
     Órgão Responsável: {orgao_responsavel}
     Pessoas Responsáveis: {get_pessoas_str(pessoas_responsaveis)}
@@ -111,9 +211,13 @@ def get_prompt_recomendacao(contexto, recomendacao):
     Se o órgão responsável não estiver disponível, preencha o campo orgao_responsavel_recomendacao com "Desconhecido".
     """
 
-def extract_obrigacao(row, obrigacao):
-    prompt_obrigacao = get_prompt_obrigacao(row, obrigacao)
+def extract_obrigacao(contexto, descricao_obrigacao):
+    prompt_obrigacao = get_prompt_obrigacao(contexto, descricao_obrigacao)
     return extractor_obrigacao.invoke(prompt_obrigacao)
+
+def extract_recomendacao(contexto, descricao_recomendacao):
+    prompt_recomendacao = get_prompt_recomendacao(contexto, descricao_recomendacao)
+    return extractor_recomendacao.invoke(prompt_recomendacao)
 
 def extract_decisao_ner(acordao):
     prompt_decisao = generate_few_shot_ner_prompts(acordao)

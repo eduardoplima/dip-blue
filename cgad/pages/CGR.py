@@ -3,8 +3,22 @@ import datetime
 import json
 import streamlit as st
 
-from tools.models import ObrigacaoORM, ProcessoORM, DecisaoORM, RecomendacaoORM, get_db_dip, get_db_processo
-from utils import extract_decisao_ner, extract_obrigacao
+from tools.models import (
+    ObrigacaoORM, 
+    ProcessoORM, 
+    DecisaoORM, 
+    RecomendacaoORM, 
+    get_db_dip, 
+    get_db_processo
+    )
+from utils import (
+    extract_decisao_ner, 
+    extract_obrigacao, 
+    extract_recomendacao, 
+    get_df_decisao, 
+    get_pessoas,
+    get_orgaos
+)
 from dotenv import load_dotenv
 
 import pickle
@@ -23,41 +37,30 @@ Preencha os campos abaixo e clique em "Salvar" para efetivar o registro no banco
 """
 )
 
-def buscar_decisões():
+def buscar_decisoes():
     numero_processo = st.session_state.get("numero_processo_input")
     ano_processo = st.session_state.get("ano_processo_input")
+
+    df_decisao = get_df_decisao(numero_processo, ano_processo)
 
     if not numero_processo or not ano_processo:
         st.error("Por favor, preencha o número e o ano do processo.")
         st.session_state.decisoes_encontradas = None
         return
-
-    try:
-        db_processo = next(get_db_processo())
-        decisoes = db_processo.query(DecisaoORM).filter(
-            DecisaoORM.NumeroProcesso == numero_processo,
-            DecisaoORM.AnoProcesso == ano_processo
-        ).all()
-        if decisoes:
-            st.session_state.decisoes_encontradas = decisoes
-            if len(decisoes) == 1:
-                st.success(f"Foi encontrada {len(decisoes)} decisão para o processo informado.")
-            else:
-                st.success(f"Foram encontradas {len(decisoes)} decisões para o processo informado.")
-        else:
-            st.warning("Decisões não encontradas.")
-            st.session_state.decisoes_encontradas = None
-    except Exception as e:
-        st.error(f"Ocorreu um erro ao buscar o processo: {e}")
+    
+    if df_decisao.empty:
+        st.warning("O processo informado não possui decisões ou não existe.")
         st.session_state.decisoes_encontradas = None
-    finally:
-        db_processo.close()
+        return
+    
+    st.session_state.decisoes_encontradas = df_decisao
 
-def extrair_itens(acordao):
+def extrair_itens(decisao, acordao):
     #result = extract_decisao_ner(acordao)
     result = pickle.load(open("decisao_extraida.pkl", "rb")) if os.path.exists("decisao_extraida.pkl") else None
     if result:
-        st.session_state.decisao_extraida = result
+        st.session_state.itens_decisao = result
+        st.session_state.decisao_escolhida = decisao
         st.success("Decisão extraída com sucesso!")
     else:
         st.error("Não foi possível extrair a decisão do acórdão.")
@@ -70,6 +73,7 @@ def salvar_obrigacao(obr_dict):
     prazo = obr_dict.get("prazo")
     data_cumprimento = obr_dict.get("data_cumprimento")
     id_orgao_responsavel = obr_dict.get("id_orgao_responsavel", 0)
+    orgao_responsavel = obr_dict.get("orgao_responsavel")
     tem_multa_cominatoria = obr_dict.get("tem_multa_cominatoria", False)
     descricao_obrigacao = obr_dict.get("descricao_obrigacao")
     nome_responsavel_multa = obr_dict.get("nome_responsavel_multa")
@@ -162,7 +166,6 @@ def salvar_recomendacao(rec_dict):
 
     finally:
         db_dip.close()
-    
 
 col1_busca, col2_busca, col_btn_busca = st.columns([1, 1, 0.5])
 with col1_busca:
@@ -171,25 +174,60 @@ with col2_busca:
     st.text_input("Ano do Processo", key="ano_processo_input")
 with col_btn_busca:
     st.markdown("<br>", unsafe_allow_html=True)
-    st.button("Buscar decisões", on_click=buscar_decisões)
-
-if st.session_state.get("processo_encontrado"):
-    st.info(f"Assunto do processo encontrado: **{st.session_state.processo_encontrado.assunto}**")
+    st.button("Buscar decisões", on_click=buscar_decisoes)
 
 # Bloco para exibir os resultados da busca
-if st.session_state.get("decisoes_encontradas"):
-    st.subheader("Decisões encontradas")
-    for p in st.session_state.decisoes_encontradas:
-        acordao = getattr(p, "texto_acordao", None)
-        st.text_area(label="Texto do Acórdão", value=acordao, height=300, disabled=True)
-        st.button("Extrair itens da decisão", on_click=extrair_itens, args=(acordao,))
+decisoes_encontradas = st.session_state.get("decisoes_encontradas", None)
+if decisoes_encontradas is not None and not decisoes_encontradas.empty:
+    assunto = decisoes_encontradas['assunto'].values[0]
+    orgao = decisoes_encontradas['orgao_responsavel'].values[0]
+    responsaveis = decisoes_encontradas['responsaveis'].values[0]
+    
+    st.markdown(f"""
+    **Assunto do processo encontrado:** {assunto}  
+    **Órgão envolvido:** {orgao}
+    """)
+    with st.expander("👥 Pessoas envolvidas"):
+        for i, p in enumerate(responsaveis):
+            st.markdown(f"- **Responsável {i+1}:** {p['nome_responsavel']}  \n  Documento: `{p['documento_responsavel']}`")        
 
-if st.session_state.get("decisao_extraida"):
-    st.subheader("Decisão Extraída")
-    decisao_extraida = st.session_state.decisao_extraida
+    st.subheader("Decisões encontradas")
+    for _, d in st.session_state.decisoes_encontradas.iterrows():
+        acordao = getattr(d, "texto_acordao", None)
+        st.text_area(label="Texto do Acórdão", value=acordao, height=400)
+        st.button("Extrair itens da decisão", on_click=extrair_itens, args=(d, acordao))
+
+if st.session_state.get("itens_decisao"):
+    st.subheader("Itens extraídos da decisão")
+    itens_decisao = st.session_state.itens_decisao
+    numero_processo = st.session_state.get("numero_processo_input")
+    ano_processo = st.session_state.get("ano_processo_input")
+    contexto = get_df_decisao(numero_processo, ano_processo)
+
+    obrigacoes = itens_decisao.obrigacoes
+    obrigacoes_structured = []
+    '''
+    if obrigacoes:
+        for o in obrigacoes:
+            obrigacao_struct = extract_obrigacao(contexto, o.descricao_obrigacao)
+            if obrigacao_struct:
+                obrigacoes_structured.append(obrigacao_struct)
+    '''
+    recomendacoes = itens_decisao.recomendacoes
+    recomendacoes_structured = []
+    recomendacoes_structured = pickle.load(open("recomendacoes.pkl", "rb")) if os.path.exists("recomendacoes.pkl") else []
+    '''
+    if recomendacoes:
+        for r in recomendacoes:
+            rec_struct = extract_recomendacao(contexto, r.descricao_recomendacao)
+            if rec_struct:
+                recomendacoes_structured.append(rec_struct)
+
+    pickle.dump(recomendacoes_structured, open("recomendacoes.pkl", "wb"))
+    '''
 
     st.subheader("Obrigações Extraídas")
-    for i, o in enumerate(decisao_extraida.obrigacoes):
+    for i, o in enumerate(obrigacoes_structured):
         with st.form(key=f"obrigacao_form_{i}", clear_on_submit=True):
             st.markdown(f"**Obrigação {i+1}:**")
             
@@ -200,7 +238,7 @@ if st.session_state.get("decisao_extraida"):
                 height=100,
                 key=f"descricao_obr_{i}"
             )
-            '''
+            
             de_fazer = st.checkbox(
                 "É Obrigação de Fazer?", 
                 value=o.de_fazer,
@@ -286,16 +324,14 @@ if st.session_state.get("decisao_extraida"):
                     except json.JSONDecodeError:
                         st.error("Formato JSON inválido para 'Solidários da Multa Cominatória'.")
                         solidarios_multa = None
-                    '''
 
             submitted_obr = st.form_submit_button("Salvar Obrigação")
             
             if submitted_obr:
-                '''
                 obr_dict = {
-                    "id_processo": decisao_extraida.id_processo,
-                    "id_composicao_pauta": decisao_extraida.id_composicao_pauta,
-                    "id_voto_pauta": decisao_extraida.id_voto_pauta,
+                    "id_processo": contexto['id_processo'],
+                    "id_composicao_pauta": contexto['id_composicao_pauta'],
+                    "id_voto_pauta": contexto['id_voto_pauta'],
                     "descricao_obrigacao": descricao_obrigacao,
                     "de_fazer": de_fazer,
                     "prazo": prazo,
@@ -311,14 +347,10 @@ if st.session_state.get("decisao_extraida"):
                     "e_multa_solidaria": e_multa_solidaria if tem_multa_cominatoria else False,
                     "solidarios_multa": solidarios_multa if tem_multa_cominatoria and e_multa_solidaria else None,
                 }
-                '''
-                obr_dict = {
-                    "descricao_obrigacao": descricao_obrigacao
-                }
                 salvar_obrigacao(obr_dict)
 
     st.subheader("Recomendações Extraídas")
-    for i, r in enumerate(decisao_extraida.recomendacoes):
+    for i, r in enumerate(recomendacoes_structured):
         with st.form(key=f"recomendacao_form_{i}", clear_on_submit=True):
             st.markdown(f"**Recomendação {i+1}:**")
             
@@ -329,7 +361,6 @@ if st.session_state.get("decisao_extraida"):
                 height=100,
                 key=f"descricao_rec_{i}"
             )
-            '''
             prazo_cumprimento_recomendacao = st.text_input(
                 "Prazo sugerido", 
                 value=r.prazo_cumprimento_recomendacao,
@@ -341,37 +372,51 @@ if st.session_state.get("decisao_extraida"):
                 format="DD/MM/YYYY",
                 key=f"data_rec_{i}"
             )
-            nome_responsavel = st.text_input(
-                "Nome do Responsável", 
-                value=r.nome_responsavel_recomendacao,
+
+            pessoas_df = get_pessoas()
+            opcoes_pessoas = pessoas_df.to_dict("records")  # [{'id': 1, 'nome': 'João'}, ...]
+            try:
+                index_pessoa = next(i for i, p in enumerate(opcoes_pessoas) if p['nome'] == r.nome_responsavel_recomendacao)
+            except StopIteration:
+                index_pessoa = 0
+            pessoa_selecionada = st.selectbox(
+                "Nome do Responsável",
+                options=opcoes_pessoas,
+                index=index_pessoa,
+                format_func=lambda x: x['nome'],
                 key=f"nome_resp_rec_{i}"
             )
-            orgao_responsavel = st.text_input(
-                "Órgão Responsável", 
-                value=r.orgao_responsavel_recomendacao,
+            id_pessoa_selecionada = pessoa_selecionada['id']
+
+            orgaos_df = get_orgaos()
+            opcoes_orgaos = orgaos_df.to_dict("records")
+            try:
+                index_orgao = next(i for i, o in enumerate(opcoes_orgaos) if o['nome'] == r.orgao_responsavel_recomendacao)
+            except StopIteration:
+                index_orgao = 0
+            orgao_selecionado = st.selectbox(
+                "Órgão Responsável",
+                options=opcoes_orgaos,
+                index=index_orgao,
+                format_func=lambda x: x['nome'],
                 key=f"orgao_resp_rec_{i}"
             )
-            '''
+            id_orgao_selecionado = orgao_selecionado['id']
 
             submitted_rec = st.form_submit_button("Salvar Recomendação")
             
             if submitted_rec:
-                '''
                 rec_dict = {
-                    "id_processo": decisao_extraida.id_processo,
-                    "id_composicao_pauta": decisao_extraida.id_composicao_pauta,
-                    "id_voto_pauta": decisao_extraida.id_voto_pauta,
+                    "id_processo": contexto['id_processo'],
+                    "id_composicao_pauta": contexto['id_composicao_pauta'],
+                    "id_voto_pauta": contexto['id_voto_pauta'],
                     "descricao_recomendacao": descricao_recomendacao,
                     "prazo_cumprimento_recomendacao": prazo_cumprimento_recomendacao,
                     "data_cumprimento_recomendacao": data_cumprimento_recomendacao,
-                    "nome_responsavel": nome_responsavel,
-                    "orgao_responsavel": orgao_responsavel,
-                    "id_pessoa_responsavel": None, # Adicione lógica para isso se necessário
-                    "id_orgao_responsavel": None, # Adicione lógica para isso se necessário
-                }
-                '''
-                rec_dict = {
-                    "descricao_recomendacao": descricao_recomendacao
+                    "nome_responsavel": pessoa_selecionada['nome'],
+                    "orgao_responsavel": orgao_selecionado['id'],
+                    "id_pessoa_responsavel": pessoa_selecionada['id'], # Adicione lógica para isso se necessário
+                    "id_orgao_responsavel": orgao_selecionado['id'], # Adicione lógica para isso se necessário
                 }
                 salvar_recomendacao(rec_dict)
             
