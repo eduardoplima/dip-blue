@@ -2,15 +2,18 @@
 import os
 import pymssql
 import datetime
+import math
+
 import pandas as pd
 
+from datetime import date, datetime
 from langchain_openai import  AzureChatOpenAI, ChatOpenAI
-from dotenv import load_dotenv
 
 from tools.schema import Obrigacao, Recomendacao, NERDecisao
 from tools.models import ObrigacaoORM
-
 from tools.prompt import generate_few_shot_ner_prompts
+
+from dotenv import load_dotenv
 
 load_dotenv()  # Carrega variáveis de ambiente do arquivo .env
 
@@ -22,6 +25,155 @@ def get_chat_model():
 extractor_obrigacao = get_chat_model().with_structured_output(Obrigacao, include_raw=False, method="json_schema")
 extractor_decisao = get_chat_model().with_structured_output(NERDecisao, include_raw=False, method="json_schema")
 extractor_recomendacao = get_chat_model().with_structured_output(Recomendacao, include_raw=False, method="json_schema")
+
+
+
+def _unwrap(v):
+    """Return a plain scalar from pandas/NumPy/list/tuple/df/series/etc."""
+    if v is None:
+        return None
+
+    # pandas first
+    try:
+        import pandas as pd
+        if isinstance(v, pd.DataFrame):
+            return None if v.empty else v.iloc[0, 0]
+        if isinstance(v, (pd.Series, pd.Index)):
+            return None if len(v) == 0 else v.iloc[0]
+        if v is pd.NaT:
+            return None
+    except Exception:
+        pass
+
+    # numpy next
+    try:
+        import numpy as np
+        if isinstance(v, np.ndarray):
+            return None if v.size == 0 else v.flat[0]
+        if isinstance(v, np.generic):
+            return v.item()
+        if isinstance(v, np.datetime64):
+            # convert to python date
+            return datetime.utcfromtimestamp(
+                v.astype('datetime64[ns]').astype('int') / 1e9
+            ).date()
+    except Exception:
+        pass
+
+    # plain containers
+    if isinstance(v, (list, tuple, set)):
+        for item in v:
+            return item  # first element
+        return None
+
+    return v
+
+def to_bool(v, default=False):
+    v = _unwrap(v)
+    if v in (None, ''):
+        return default
+    if isinstance(v, bool):
+        return v
+    try:
+        import numpy as np
+        if isinstance(v, np.bool_):
+            return bool(v)
+    except Exception:
+        pass
+    if isinstance(v, (int, float)):
+        try:
+            if isinstance(v, float) and math.isnan(v):
+                return default
+        except Exception:
+            pass
+        return v != 0
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in {'true','1','t','yes','y','sim','s','on'}:
+            return True
+        if s in {'false','0','f','no','n','nao','não','off'}:
+            return False
+    return bool(v)
+
+def to_float(v, default=None):
+    v = _unwrap(v)
+    if v in (None, ''):
+        return default
+    try:
+        if isinstance(v, float) and math.isnan(v):
+            return default
+    except Exception:
+        pass
+    try:
+        if isinstance(v, str):
+            s = v.strip().replace('R$', '').replace(' ', '')
+            # handle "1.234,56" -> "1234.56"
+            if ',' in s:
+                s = s.replace('.', '').replace(',', '.')
+            return float(s)
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+def to_int(v, default=None):
+    v = _unwrap(v)
+    if v in (None, ''):
+        return default
+    try:
+        # handle NaN
+        if isinstance(v, float) and math.isnan(v):
+            return default
+    except Exception:
+        pass
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def to_pos_int_or_none(v):
+    n = to_int(v, default=None)
+    return n if (n is not None and n > 0) else None
+
+
+def to_str_or_none(v):
+    v = _unwrap(v)
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s or None
+
+
+def to_date_or_none(v):
+    v = _unwrap(v)
+    if v is None:
+        return None
+
+    # pandas Timestamp?
+    try:
+        import pandas as pd
+        if isinstance(v, pd.Timestamp):
+            return v.to_pydatetime().date()
+        # try generic parsing if it's a string or similar
+        parsed = pd.to_datetime(v, dayfirst=True, errors="coerce")
+        if not pd.isna(parsed):
+            return parsed.to_pydatetime().date()
+    except Exception:
+        pass
+
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    if isinstance(v, str):
+        # best-effort ISO / common formats
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(v, fmt).date()
+            except ValueError:
+                continue
+    return None
+
 
 def safe_int(value):
     if pd.isna(value):

@@ -17,7 +17,14 @@ from utils import (
     extract_recomendacao, 
     get_df_decisao, 
     get_pessoas,
-    get_orgaos
+    get_orgaos,
+    to_date_or_none,
+    to_int,
+    to_bool,
+    to_float,
+    to_pos_int_or_none,
+    to_str_or_none
+    
 )
 from dotenv import load_dotenv
 
@@ -66,23 +73,34 @@ def extrair_itens(decisao, acordao):
         st.error("Não foi possível extrair a decisão do acórdão.")
 
 def salvar_obrigacao(obr_dict):
-    id_processo = obr_dict.get("id_processo")
-    id_composicao_pauta = obr_dict.get("id_composicao_pauta")
-    id_voto_pauta = obr_dict.get("id_voto_pauta")
-    de_fazer = obr_dict.get("de_fazer")
-    prazo = obr_dict.get("prazo")
-    data_cumprimento = obr_dict.get("data_cumprimento")
-    id_orgao_responsavel = obr_dict.get("id_orgao_responsavel", 0)
-    orgao_responsavel = obr_dict.get("orgao_responsavel")
-    tem_multa_cominatoria = obr_dict.get("tem_multa_cominatoria", False)
-    descricao_obrigacao = obr_dict.get("descricao_obrigacao")
-    nome_responsavel_multa = obr_dict.get("nome_responsavel_multa")
-    documento_responsavel_multa = obr_dict.get("documento_responsavel_multa")
-    id_pessoa_multa = obr_dict.get("id_pessoa_multa", 0)
-    valor_multa = obr_dict.get("valor_multa", 0.0)
-    periodo_multa = obr_dict.get("periodo_multa")
-    e_multa_solidaria = obr_dict.get("e_multa_solidaria", False)
-    solidarios_multa = obr_dict.get("solidarios_multa", {})
+    id_processo          = to_int(obr_dict.get("id_processo"))
+    id_composicao_pauta  = to_int(obr_dict.get("id_composicao_pauta"))
+    id_voto_pauta        = to_int(obr_dict.get("id_voto_pauta"))
+
+    de_fazer             = to_bool(obr_dict.get("de_fazer"), default=True)
+    prazo                = to_str_or_none(obr_dict.get("prazo"))
+    data_cumprimento     = to_date_or_none(obr_dict.get("data_cumprimento"))
+
+    id_orgao_responsavel = to_pos_int_or_none(obr_dict.get("id_orgao_responsavel"))
+    orgao_responsavel    = to_str_or_none(obr_dict.get("orgao_responsavel"))
+
+    tem_multa_cominatoria      = to_bool(obr_dict.get("tem_multa_cominatoria"), default=False)
+    descricao_obrigacao        = to_str_or_none(obr_dict.get("descricao_obrigacao"))
+    nome_responsavel_multa     = to_str_or_none(obr_dict.get("nome_responsavel_multa"))
+    documento_responsavel_multa= to_str_or_none(obr_dict.get("documento_responsavel_multa"))
+    id_pessoa_multa            = to_pos_int_or_none(obr_dict.get("id_pessoa_multa"))
+
+    valor_multa         = to_float(obr_dict.get("valor_multa"))
+    periodo_multa       = to_str_or_none(obr_dict.get("periodo_multa"))
+    e_multa_solidaria   = to_bool(obr_dict.get("e_multa_solidaria"), default=False)
+
+    solidarios_multa = obr_dict.get("solidarios_multa") or {}
+    if not isinstance(solidarios_multa, dict):
+        try:
+            import json
+            solidarios_multa = json.loads(str(solidarios_multa))
+        except Exception:
+            solidarios_multa = {}
 
     try:
         db_dip = next(get_db_dip())
@@ -126,16 +144,28 @@ def salvar_obrigacao(obr_dict):
         db_dip.close()
 
 def salvar_recomendacao(rec_dict):
-    id_processo = rec_dict.get("id_processo")
-    id_composicao_pauta = rec_dict.get("id_composicao_pauta")
-    id_voto_pauta = rec_dict.get("id_voto_pauta")
-    descricao_recomendacao = rec_dict.get("descricao_recomendacao")
-    prazo_cumprimento_recomendacao = rec_dict.get("prazo_cumprimento_recomendacao")
-    data_cumprimento_recomendacao = rec_dict.get("data_cumprimento_recomendacao")
-    nome_responsavel = rec_dict.get("nome_responsavel")
-    id_pessoa_responsavel = rec_dict.get("id_pessoa_responsavel", 0)
-    orgao_responsavel = rec_dict.get("orgao_responsavel")
-    id_orgao_responsavel = rec_dict.get("id_orgao_responsavel", 0)
+    id_processo            = to_int(rec_dict.get("id_processo"))
+    id_composicao_pauta    = to_int(rec_dict.get("id_composicao_pauta"))
+    id_voto_pauta          = to_int(rec_dict.get("id_voto_pauta"))
+
+    descricao_recomendacao         = to_str_or_none(rec_dict.get("descricao_recomendacao"))
+    prazo_cumprimento_recomendacao = to_str_or_none(rec_dict.get("prazo_cumprimento_recomendacao"))
+    data_cumprimento_recomendacao  = to_date_or_none(rec_dict.get("data_cumprimento_recomendacao"))
+    nome_responsavel               = to_str_or_none(rec_dict.get("nome_responsavel"))
+    id_pessoa_responsavel          = to_pos_int_or_none(rec_dict.get("id_pessoa_responsavel"))
+    orgao_responsavel              = to_str_or_none(rec_dict.get("orgao_responsavel"))
+    id_orgao_responsavel           = to_pos_int_or_none(rec_dict.get("id_orgao_responsavel"))
+
+    # (Opcional) Validação de campos obrigatórios antes de seguir:
+    required = {
+        "id_processo": id_processo,
+        "id_composicao_pauta": id_composicao_pauta,
+        "id_voto_pauta": id_voto_pauta,
+        "descricao_recomendacao": descricao_recomendacao,
+    }
+    missing = [k for k, v in required.items() if v in (None, "")]
+    if missing:
+        raise ValueError(f"Campos obrigatórios ausentes/invalidos: {', '.join(missing)}")
 
     try:
         db_dip = next(get_db_dip())
@@ -151,6 +181,8 @@ def salvar_recomendacao(rec_dict):
             OrgaoResponsavel=orgao_responsavel,
             IdOrgaoResponsavel=id_orgao_responsavel if id_orgao_responsavel > 0 else None,
         )
+
+
         db_dip.add(new_recomendacao)
         db_dip.commit()
         db_dip.refresh(new_recomendacao)
@@ -256,19 +288,23 @@ if st.session_state.get("itens_decisao"):
                 key=f"data_cumprimento_obr_{i}"
             )
 
-            st.subheader("Responsável e Multa Cominatória")
-            orgao_responsavel = st.text_input(
-                "Órgão Responsável", 
-                value=o.orgao_responsavel,
-                key=f"orgao_resp_obr_{i}"
+            orgaos_df = get_orgaos()
+            opcoes_orgaos = orgaos_df.to_dict("records")
+            try:
+                index_orgao = next(i for i, o in enumerate(opcoes_orgaos) if o['nome'] == r.orgao_responsavel_recomendacao)
+            except StopIteration:
+                index_orgao = 0
+            orgao_selecionado = st.selectbox(
+                "Órgão Responsável",
+                options=opcoes_orgaos,
+                index=index_orgao,
+                format_func=lambda x: x['nome'],
+                key=f"orgao_resp_rec_{i}"
             )
-            id_orgao_responsavel = st.number_input(
-                "ID do Órgão Responsável", 
-                min_value=0, 
-                step=1, 
-                value=o.id_orgao_responsavel if o.id_orgao_responsavel else 0,
-                key=f"id_orgao_resp_obr_{i}"
-            )
+            id_orgao_selecionado = orgao_selecionado['id']
+
+            st.subheader("Multa Cominatória")
+
             tem_multa_cominatoria = st.checkbox(
                 "Tem Multa Cominatória?", 
                 value=o.tem_multa_cominatoria,
@@ -374,7 +410,7 @@ if st.session_state.get("itens_decisao"):
             )
 
             pessoas_df = get_pessoas()
-            opcoes_pessoas = pessoas_df.to_dict("records")  # [{'id': 1, 'nome': 'João'}, ...]
+            opcoes_pessoas = pessoas_df.to_dict("records")
             try:
                 index_pessoa = next(i for i, p in enumerate(opcoes_pessoas) if p['nome'] == r.nome_responsavel_recomendacao)
             except StopIteration:
@@ -414,12 +450,12 @@ if st.session_state.get("itens_decisao"):
                     "prazo_cumprimento_recomendacao": prazo_cumprimento_recomendacao,
                     "data_cumprimento_recomendacao": data_cumprimento_recomendacao,
                     "nome_responsavel": pessoa_selecionada['nome'],
-                    "orgao_responsavel": orgao_selecionado['id'],
+                    "orgao_responsavel": orgao_selecionado['nome'],
                     "id_pessoa_responsavel": pessoa_selecionada['id'], # Adicione lógica para isso se necessário
                     "id_orgao_responsavel": orgao_selecionado['id'], # Adicione lógica para isso se necessário
                 }
                 salvar_recomendacao(rec_dict)
-            
+                st.success("Recomendação salva com sucesso!")
 
 st.markdown("---")
 st.subheader("Obrigações salvas nessa sessão")
