@@ -20,7 +20,8 @@ st.subheader("Funcionalidades")
 # Botão para a página de Cadastro de Obrigação
 st.page_link("pages/CGR.py", label="Cadastro Geral de Recomendações (CGR - Recomendações)", icon="📝")
 
-
+# Botão para a nova página de Cancelamento
+st.page_link("pages/Cancelamentos.py", label="Cancelamento de Obrigações e Recomendações", icon="❌")
 
 st.markdown("---")
 

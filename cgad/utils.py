@@ -27,7 +27,6 @@ extractor_decisao = get_chat_model().with_structured_output(NERDecisao, include_
 extractor_recomendacao = get_chat_model().with_structured_output(Recomendacao, include_raw=False, method="json_schema")
 
 
-
 def _unwrap(v):
     """Return a plain scalar from pandas/NumPy/list/tuple/df/series/etc."""
     if v is None:
@@ -277,6 +276,9 @@ def get_df_decisao(numero_processo, ano_processo):
 
     df = pd.read_sql(query, get_connection())
 
+    if df.empty:
+        return df
+
     group_cols = [
             'id_processo', 'numero_processo', 'ano_processo', 'id_composicao_pauta', 'assunto', 
             'id_voto_pauta', 'numero_sessao', 'ano_sessao', 'data_sessao', 'relatorio',
@@ -287,16 +289,14 @@ def get_df_decisao(numero_processo, ano_processo):
     person_cols = ['nome_responsavel', 'documento_responsavel', 'tipo_responsavel', 'id_pessoa']
 
     # Agrupa o DataFrame e aplica uma função lambda para criar a lista de dicionários
+    
     df = df.groupby(group_cols, dropna=False).apply(
         lambda x: pd.Series({'responsaveis': x[person_cols].apply(
             lambda y: y.dropna().to_dict(), axis=1
         ).tolist()})
     ).reset_index()
 
-
-    df= df[['id_composicao_pauta', 'id_voto_pauta']].merge(df, on=['id_composicao_pauta', 'id_voto_pauta'], how='left')
     df['data_sessao'] = pd.to_datetime(df['data_sessao'], errors='coerce')
-
     return df
 
 def get_prompt_obrigacao(contexto, descricao_obrigacao):

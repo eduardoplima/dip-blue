@@ -28,7 +28,7 @@ from utils import (
 )
 from dotenv import load_dotenv
 
-import pickle
+#import pickle
 
 load_dotenv()
 
@@ -63,8 +63,7 @@ def buscar_decisoes():
     st.session_state.decisoes_encontradas = df_decisao
 
 def extrair_itens(decisao, acordao):
-    #result = extract_decisao_ner(acordao)
-    result = pickle.load(open("decisao_extraida.pkl", "rb")) if os.path.exists("decisao_extraida.pkl") else None
+    result = extract_decisao_ner(acordao)
     if result:
         st.session_state.itens_decisao = result
         st.session_state.decisao_escolhida = decisao
@@ -190,7 +189,6 @@ def salvar_recomendacao(rec_dict):
         if "recomendacoes_salvas" not in st.session_state:
             st.session_state.recomendacoes_salvas = []
         st.session_state.recomendacoes_salvas.append(new_recomendacao)
-        st.success(f"Recomendação com ID {new_recomendacao.IdRecomendacao} salva com sucesso!")
 
     except Exception as e:
         st.error(f"Ocorreu um erro ao salvar a recomendação: {e}")
@@ -199,9 +197,18 @@ def salvar_recomendacao(rec_dict):
     finally:
         db_dip.close()
 
+def mask_input_on_blur():
+    # Get the value from the text input
+    raw_value = st.session_state.numero_processo_input
+    
+    # Check if the value is not empty to avoid zfilling an empty string
+    if raw_value:
+        # Apply zfill(6) to the value and update the session state
+        st.session_state.numero_processo_input = raw_value.zfill(6)
+
 col1_busca, col2_busca, col_btn_busca = st.columns([1, 1, 0.5])
 with col1_busca:
-    st.text_input("Número do Processo", key="numero_processo_input")
+    st.text_input("Número do Processo", key="numero_processo_input", on_change=mask_input_on_blur)
 with col2_busca:
     st.text_input("Ano do Processo", key="ano_processo_input")
 with col_btn_busca:
@@ -224,10 +231,10 @@ if decisoes_encontradas is not None and not decisoes_encontradas.empty:
             st.markdown(f"- **Responsável {i+1}:** {p['nome_responsavel']}  \n  Documento: `{p['documento_responsavel']}`")        
 
     st.subheader("Decisões encontradas")
-    for _, d in st.session_state.decisoes_encontradas.iterrows():
+    for i, d in st.session_state.decisoes_encontradas.iterrows():
         acordao = getattr(d, "texto_acordao", None)
         st.text_area(label="Texto do Acórdão", value=acordao, height=400)
-        st.button("Extrair itens da decisão", on_click=extrair_itens, args=(d, acordao))
+        st.button("Extrair itens da decisão", on_click=extrair_itens, args=(d, acordao), key=f"extrair_itens_{i}")
 
 if st.session_state.get("itens_decisao"):
     st.subheader("Itens extraídos da decisão")
@@ -238,27 +245,25 @@ if st.session_state.get("itens_decisao"):
 
     obrigacoes = itens_decisao.obrigacoes
     obrigacoes_structured = []
-    '''
+    
     if obrigacoes:
         for o in obrigacoes:
             obrigacao_struct = extract_obrigacao(contexto, o.descricao_obrigacao)
             if obrigacao_struct:
                 obrigacoes_structured.append(obrigacao_struct)
-    '''
+
     recomendacoes = itens_decisao.recomendacoes
     recomendacoes_structured = []
-    recomendacoes_structured = pickle.load(open("recomendacoes.pkl", "rb")) if os.path.exists("recomendacoes.pkl") else []
-    '''
+
     if recomendacoes:
         for r in recomendacoes:
             rec_struct = extract_recomendacao(contexto, r.descricao_recomendacao)
             if rec_struct:
                 recomendacoes_structured.append(rec_struct)
 
-    pickle.dump(recomendacoes_structured, open("recomendacoes.pkl", "wb"))
-    '''
-
     st.subheader("Obrigações Extraídas")
+    print(obrigacoes_structured)
+
     for i, o in enumerate(obrigacoes_structured):
         with st.form(key=f"obrigacao_form_{i}", clear_on_submit=True):
             st.markdown(f"**Obrigação {i+1}:**")
@@ -278,12 +283,12 @@ if st.session_state.get("itens_decisao"):
             )
             prazo = st.text_input(
                 "Prazo (ex: '30 dias', 'imediatamente')", 
-                value=o.prazo,
+                value=o.prazo_obrigacao,
                 key=f"prazo_obr_{i}"
             )
             data_cumprimento = st.date_input(
                 "Data de Cumprimento", 
-                value=o.data_cumprimento if o.data_cumprimento else None, 
+                value=o.data_cumprimento_obrigacao if o.data_cumprimento_obrigacao else None, 
                 format="DD/MM/YYYY",
                 key=f"data_cumprimento_obr_{i}"
             )
@@ -291,7 +296,7 @@ if st.session_state.get("itens_decisao"):
             orgaos_df = get_orgaos()
             opcoes_orgaos = orgaos_df.to_dict("records")
             try:
-                index_orgao = next(i for i, o in enumerate(opcoes_orgaos) if o['nome'] == r.orgao_responsavel_recomendacao)
+                index_orgao = next(i for i, org in enumerate(opcoes_orgaos) if org['nome'] == o.orgao_responsavel_obrigacao)
             except StopIteration:
                 index_orgao = 0
             orgao_selecionado = st.selectbox(
@@ -312,38 +317,36 @@ if st.session_state.get("itens_decisao"):
             )
 
             if tem_multa_cominatoria:
-                nome_responsavel_multa = st.text_input(
-                    "Nome do Responsável pela Multa", 
-                    value=o.nome_responsavel_multa,
-                    key=f"nome_multa_obr_{i}"
+                pessoas_df = get_pessoas()
+                opcoes_pessoas = pessoas_df.to_dict("records")
+                try:
+                    index_pessoa = next(i for i, p in enumerate(opcoes_pessoas) if p['nome'] == o.nome_responsavel_multa_cominatoria)
+                except StopIteration:
+                    index_pessoa = 0
+                pessoa_selecionada = st.selectbox(
+                    "Nome do Responsável",
+                    options=opcoes_pessoas,
+                    index=index_pessoa,
+                    format_func=lambda x: x['nome'],
+                    key=f"nome_resp_rec_{i}"
                 )
-                documento_responsavel_multa = st.text_input(
-                    "Documento do Responsável pela Multa", 
-                    value=o.documento_responsavel_multa,
-                    key=f"doc_multa_obr_{i}"
-                )
-                id_pessoa_multa = st.number_input(
-                    "ID da Pessoa da Multa", 
-                    min_value=0, 
-                    step=1, 
-                    value=o.id_pessoa_multa if o.id_pessoa_multa else 0,
-                    key=f"id_pessoa_multa_obr_{i}"
-                )
+                id_pessoa_selecionada = pessoa_selecionada['id']
+
                 valor_multa = st.number_input(
                     "Valor da Multa Cominatória", 
                     min_value=0.0, 
                     step=0.01, 
-                    value=o.valor_multa if o.valor_multa else 0.0,
+                    value=o.valor_multa_cominatoria if o.valor_multa_cominatoria else 0.0,
                     key=f"valor_multa_obr_{i}"
                 )
                 periodo_multa = st.text_input(
                     "Período da Multa", 
-                    value=o.periodo_multa,
+                    value=o.periodo_multa_cominatoria,
                     key=f"periodo_multa_obr_{i}"
                 )
                 e_multa_solidaria = st.checkbox(
                     "É Multa Cominatória Solidária?", 
-                    value=o.e_multa_solidaria,
+                    value=o.e_multa_cominatoria_solidaria,
                     key=f"multa_solidaria_obr_{i}"
                 )
                 solidarios_multa = {}
@@ -351,7 +354,7 @@ if st.session_state.get("itens_decisao"):
                     solidarios_multa_input = st.text_area(
                         "Solidários da Multa (JSON)", 
                         height=100, 
-                        value=json.dumps(o.solidarios_multa),
+                        value=json.dumps(o.solidarios_multa_cominatoria),
                         key=f"solidarios_multa_obr_{i}"
                     )
                     try:
@@ -370,18 +373,17 @@ if st.session_state.get("itens_decisao"):
                     "id_voto_pauta": contexto['id_voto_pauta'],
                     "descricao_obrigacao": descricao_obrigacao,
                     "de_fazer": de_fazer,
-                    "prazo": prazo,
-                    "data_cumprimento": data_cumprimento,
-                    "orgao_responsavel": orgao_responsavel,
-                    "id_orgao_responsavel": id_orgao_responsavel,
+                    "prazo_obrigacao": prazo,
+                    "data_cumprimento_obrigacao": data_cumprimento,
+                    "orgao_responsavel_obrigacao": orgao_selecionado,
+                    "id_orgao_responsavel_obrigacao": id_orgao_selecionado,
                     "tem_multa_cominatoria": tem_multa_cominatoria,
-                    "nome_responsavel_multa": nome_responsavel_multa if tem_multa_cominatoria else None,
-                    "documento_responsavel_multa": documento_responsavel_multa if tem_multa_cominatoria else None,
-                    "id_pessoa_multa": id_pessoa_multa if tem_multa_cominatoria else None,
-                    "valor_multa": valor_multa if tem_multa_cominatoria else None,
-                    "periodo_multa": periodo_multa if tem_multa_cominatoria else None,
-                    "e_multa_solidaria": e_multa_solidaria if tem_multa_cominatoria else False,
-                    "solidarios_multa": solidarios_multa if tem_multa_cominatoria and e_multa_solidaria else None,
+                    "nome_responsavel_multa": pessoa_selecionada if tem_multa_cominatoria else None,
+                    "id_pessoa_multa": id_pessoa_selecionada if tem_multa_cominatoria else None,
+                    "valor_multa_cominatoria": valor_multa if tem_multa_cominatoria else None,
+                    "periodo_multa_cominatoria": periodo_multa if tem_multa_cominatoria else None,
+                    "e_multa_cominatoria_solidaria": e_multa_solidaria if tem_multa_cominatoria else False,
+                    "solidarios_multa_cominatoria": solidarios_multa if tem_multa_cominatoria and e_multa_solidaria else None,
                 }
                 salvar_obrigacao(obr_dict)
 
@@ -458,10 +460,11 @@ if st.session_state.get("itens_decisao"):
                 st.success("Recomendação salva com sucesso!")
 
 st.markdown("---")
-st.subheader("Obrigações salvas nessa sessão")
+st.subheader("Decisões salvas nessa sessão")
 
 db_session_display = next(get_db_dip())
 obrigacoes = st.session_state.get("obrigacoes_salvas", [])
+recomendacoes = st.session_state.get("recomendacoes_salvas", [])
 
 if obrigacoes:
     st.write(f"Total de obrigações: {len(obrigacoes)}")
@@ -476,3 +479,15 @@ if obrigacoes:
         })
 else:
     st.info("Nenhuma obrigação salva ainda.")
+
+
+if recomendacoes:
+    st.write(f"Total de recomendações: {len(recomendacoes)}")
+    for rec in recomendacoes:
+        st.json({
+            "DescricaoRecomendacao": rec.DescricaoRecomendacao,
+            "OrgaoResponsavel": rec.OrgaoResponsavel,
+            "NomeResponsavel": rec.NomeResponsavel
+        })
+else:
+    st.info("Nenhuma recomendação salva ainda.")

@@ -35,27 +35,7 @@ class JSONEncodedDict(TypeDecorator):
             return json.loads(value)
         return value
 
-class ObrigacaoORM(BaseDIP):
-    __tablename__ = "Obrigacao"
 
-    IdObrigacao = Column(Integer, primary_key=True, index=True)
-    IdProcesso = Column(Integer, nullable=False)
-    IdComposicaoPauta = Column(Integer, nullable=False)
-    IdVotoPauta = Column(Integer, nullable=False)
-    DescricaoObrigacao = Column(Text, nullable=False)
-    DeFazer = Column(Boolean, default=True)
-    Prazo = Column(String, nullable=True)
-    DataCumprimento = Column(Date, nullable=True)
-    OrgaoResponsavel = Column(String, nullable=True)
-    IdOrgaoResponsavel = Column(Integer, nullable=True)
-    TemMultaCominatoria = Column(Boolean, default=False)
-    NomeResponsavelMultaCominatoria = Column(String, nullable=True)
-    DocumentoResponsavelMultaCominatoria = Column(String, nullable=True)
-    IdPessoaMultaCominatoria = Column(Integer, nullable=True)
-    ValorMultaCominatoria = Column(Float, nullable=True)
-    PeriodoMultaCominatoria = Column(String, nullable=True)
-    EMultaCominatoriaSolidaria = Column(Boolean, default=False)
-    SolidariosMultaCominatoria = Column(JSONEncodedDict, nullable=True)
 
 class ProcessoORM(BaseProcesso):
     __tablename__ = 'Processos'
@@ -176,6 +156,29 @@ class DecisaoORM(BaseProcesso):
     SetorVoto = Column(String(255))
     DescricaoTipoVoto = Column(String(255))
 
+class ObrigacaoORM(BaseDIP):
+    __tablename__ = "Obrigacao"
+
+    IdObrigacao = Column(Integer, primary_key=True, index=True)
+    IdProcesso = Column(Integer, nullable=False)
+    IdComposicaoPauta = Column(Integer, nullable=False)
+    IdVotoPauta = Column(Integer, nullable=False)
+    DescricaoObrigacao = Column(Text, nullable=False)
+    DeFazer = Column(Boolean, default=True)
+    Prazo = Column(String, nullable=True)
+    DataCumprimento = Column(Date, nullable=True)
+    OrgaoResponsavel = Column(String, nullable=True)
+    IdOrgaoResponsavel = Column(Integer, nullable=True)
+    TemMultaCominatoria = Column(Boolean, default=False)
+    NomeResponsavelMultaCominatoria = Column(String, nullable=True)
+    DocumentoResponsavelMultaCominatoria = Column(String, nullable=True)
+    IdPessoaMultaCominatoria = Column(Integer, nullable=True)
+    ValorMultaCominatoria = Column(Float, nullable=True)
+    PeriodoMultaCominatoria = Column(String, nullable=True)
+    EMultaCominatoriaSolidaria = Column(Boolean, default=False)
+    SolidariosMultaCominatoria = Column(JSONEncodedDict, nullable=True)
+    Cancelado = Column(Boolean, default=False)
+
 class RecomendacaoORM(BaseDIP):
     __tablename__ = "Recomendacao"
 
@@ -190,11 +193,28 @@ class RecomendacaoORM(BaseDIP):
     IdPessoaResponsavel = Column(Integer, nullable=True)
     OrgaoResponsavel = Column(String, nullable=True)
     IdOrgaoResponsavel = Column(Integer, nullable=True)
+    Cancelado = Column(Boolean, nullable=True)
 
     def __repr__(self):
         return f"<Recomendacao(IdRecomendacao={self.IdRecomendacao}, descricao_recomendacao='{self.DescricaoRecomendacao[:30]}...',\
               NomeResponsavel='{self.NomeResponsavel}', DataCumprimentoRecomendacao='{self.DataCumprimentoRecomendacao}', IdOrgaoResponsavel='{self.IdOrgaoResponsavel}',\
-                IdPessoaResponsavel='{self.IdPessoaResponsavel}')>"
+                IdPessoaResponsavel='{self.IdPessoaResponsavel}', Cancelado='{self.Cancelado}')>"
+    
+class CancelamentoObrigacao(BaseDIP):
+    __tablename__ = "CancelamentoObrigacao"
+
+    IdCancelamentoObrigacao = Column(Integer, primary_key=True, index=True)
+    IdObrigacao = Column(Integer, nullable=False)
+    MotivoCancelamento = Column(Text, nullable=False)
+    DataCancelamento = Column(Date, nullable=False, default="CURRENT_TIMESTAMP")
+
+class CancelamentoRecomendacao(BaseDIP):
+    __tablename__ = "CancelamentoRecomendacao"
+
+    IdCancelamentoRecomendacao = Column(Integer, primary_key=True, index=True)
+    IdRecomendacao = Column(Integer, nullable=False)
+    MotivoCancelamento = Column(Text, nullable=False)
+    DataCancelamento = Column(Date, nullable=False, default="CURRENT_TIMESTAMP")
 
 SessionLocal_DIP = sessionmaker(autocommit=False, autoflush=False, bind=engine_dip)
 SessionLocal_Processo = sessionmaker(autocommit=False, autoflush=False, bind=engine_processo)

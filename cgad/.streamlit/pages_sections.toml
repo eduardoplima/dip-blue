@@ -1,9 +1,14 @@
 [[pages]]
-path = "app.py"
+path = "Inicio.py"
 name = "Pagina Inicial"
 icon = "🏠"
 
 [[pages]]
-path = "pages/cgr.py"
+path = "pages/CGR.py"
 name = "Cadastro Geral de Recomendações"
 icon = "📝"
+
+[[pages]]
+path = "pages/Cancelamentos.py"
+name = "Cancelamento de Itens"
+icon = "❌"
