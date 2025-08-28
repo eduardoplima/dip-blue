@@ -5,6 +5,8 @@ import datetime
 import math
 
 import pandas as pd
+import numpy as np
+import streamlit as st
 
 from datetime import date, datetime
 from langchain_openai import  AzureChatOpenAI, ChatOpenAI
@@ -14,6 +16,8 @@ from tools.models import ObrigacaoORM
 from tools.prompt import generate_few_shot_ner_prompts
 
 from dotenv import load_dotenv
+
+import diskcache as dc
 
 load_dotenv()  # Carrega variáveis de ambiente do arquivo .env
 
@@ -34,7 +38,6 @@ def _unwrap(v):
 
     # pandas first
     try:
-        import pandas as pd
         if isinstance(v, pd.DataFrame):
             return None if v.empty else v.iloc[0, 0]
         if isinstance(v, (pd.Series, pd.Index)):
@@ -46,7 +49,7 @@ def _unwrap(v):
 
     # numpy next
     try:
-        import numpy as np
+        
         if isinstance(v, np.ndarray):
             return None if v.size == 0 else v.flat[0]
         if isinstance(v, np.generic):
@@ -74,7 +77,6 @@ def to_bool(v, default=False):
     if isinstance(v, bool):
         return v
     try:
-        import numpy as np
         if isinstance(v, np.bool_):
             return bool(v)
     except Exception:
@@ -150,7 +152,6 @@ def to_date_or_none(v):
 
     # pandas Timestamp?
     try:
-        import pandas as pd
         if isinstance(v, pd.Timestamp):
             return v.to_pydatetime().date()
         # try generic parsing if it's a string or similar
@@ -363,17 +364,55 @@ def get_prompt_recomendacao(contexto, descricao_recomendacao):
     Se o órgão responsável não estiver disponível, preencha o campo orgao_responsavel_recomendacao com "Desconhecido".
     """
 
-def extract_obrigacao(contexto, descricao_obrigacao):
+# Configure um cache global. O diretório '.cache' será criado na raiz do seu projeto.
+cache = dc.Cache("cache_llm_calls")
+
+def _extract_obrigacao_uncached(contexto, descricao_obrigacao):
     prompt_obrigacao = get_prompt_obrigacao(contexto, descricao_obrigacao)
     return extractor_obrigacao.invoke(prompt_obrigacao)
 
-def extract_recomendacao(contexto, descricao_recomendacao):
+def _extract_recomendacao_uncached(contexto, descricao_recomendacao):
     prompt_recomendacao = get_prompt_recomendacao(contexto, descricao_recomendacao)
     return extractor_recomendacao.invoke(prompt_recomendacao)
 
-def extract_decisao_ner(acordao):
+def _extract_decisao_ner_uncached(acordao):
     prompt_decisao = generate_few_shot_ner_prompts(acordao)
     return extractor_decisao.invoke(prompt_decisao)
+
+
+def extract_obrigacao(contexto, descricao_obrigacao):
+    key = ("extract_obrigacao", contexto.to_json(), descricao_obrigacao)
+    if key in cache:
+        st.info("Cache hit: Usando resultado em cache para extract_obrigacao.")
+        return cache.get(key)
+    else:
+        result = _extract_obrigacao_uncached(contexto, descricao_obrigacao)
+        cache.set(key, result)
+        st.success("Cache miss: Salvando resultado para extract_obrigacao.")
+        return result
+
+def extract_recomendacao(contexto, descricao_recomendacao):
+    key = ("extract_recomendacao", contexto.to_json(), descricao_recomendacao)
+    if key in cache:
+        st.info("Cache hit: Usando resultado em cache para extract_recomendacao.")
+        return cache.get(key)
+    else:
+        result = _extract_recomendacao_uncached(contexto, descricao_recomendacao)
+        cache.set(key, result)
+        st.success("Cache miss: Salvando resultado para extract_recomendacao.")
+        return result
+
+def extract_decisao_ner(acordao):
+    key = ("extract_decisao_ner", acordao)
+    if key in cache:
+        st.info("Cache hit: Usando resultado em cache para extract_decisao_ner.")
+        return cache.get(key)
+    else:
+        result = _extract_decisao_ner_uncached(acordao)
+        cache.set(key, result)
+        st.success("Cache miss: Salvando resultado para extract_decisao_ner.")
+        return result    
+
 
 def insert_obrigacao(db_session, obrigacao: Obrigacao, row):
     orm_obj = ObrigacaoORM(

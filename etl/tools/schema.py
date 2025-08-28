@@ -118,9 +118,9 @@ class Obrigacao(BaseModel):
     """
     descricao_obrigacao: str = Field(..., description="Descrição da obrigação.")
     de_fazer: bool | None = Field(default=True, description="Tipo da obrigação. Verdadeiro se for de fazer, falso se for de não fazer.")
-    prazo_obrigacao: str | None = Field(default=None, description="Prazo estipulado para cumprimento.")
-    data_cumprimento_obrigacao: date | None = Field(default=None, description="Data de eventual cumprimento.") #data inicio? 
-    orgao_responsavel_obrigacao: str | None = Field(default=None, description="Órgão responsável pela obrigação.")
+    prazo: str | None = Field(default=None, description="Prazo estipulado para cumprimento.")
+    data_cumprimento: date | None = Field(default=None, description="Data de eventual cumprimento.") #data inicio? 
+    orgao_responsavel: str | None = Field(default=None, description="Órgão responsável pela obrigação.")
     tem_multa_cominatoria: bool = Field(default=False, description="Indica se há multa cominatória.")
     nome_responsavel_multa_cominatoria: str | None = Field(default=None, description="Nome do responsável pela obrigação.")
     documento_responsavel_multa_cominatoria: str | None = Field(default=None, description="Documento do responsável pela obrigação.") 

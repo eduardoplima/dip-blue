@@ -89,8 +89,8 @@ def salvar_obrigacao(obr_dict):
     documento_responsavel_multa= to_str_or_none(obr_dict.get("documento_responsavel_multa"))
     id_pessoa_multa            = to_pos_int_or_none(obr_dict.get("id_pessoa_multa"))
 
-    valor_multa         = to_float(obr_dict.get("valor_multa"))
-    periodo_multa       = to_str_or_none(obr_dict.get("periodo_multa"))
+    valor_multa         = to_float(obr_dict.get("valor_multa")) or 0.0
+    periodo_multa       = to_str_or_none(obr_dict.get("periodo_multa")) or ""
     e_multa_solidaria   = to_bool(obr_dict.get("e_multa_solidaria"), default=False)
 
     solidarios_multa = obr_dict.get("solidarios_multa") or {}
@@ -119,9 +119,9 @@ def salvar_obrigacao(obr_dict):
         if tem_multa_cominatoria:
             new_obrigacao.NomeResponsavelMultaCominatoria = nome_responsavel_multa if nome_responsavel_multa else None
             new_obrigacao.DocumentoResponsavelMultaCominatoria = documento_responsavel_multa if documento_responsavel_multa else None
-            new_obrigacao.IdPessoaMultaCominatoria = id_pessoa_multa if id_pessoa_multa > 0 else None
-            new_obrigacao.ValorMultaCominatoria = valor_multa if valor_multa > 0 else None
-            new_obrigacao.PeriodoMultaCominatoria = periodo_multa if periodo_multa else None
+            new_obrigacao.IdPessoaMultaCominatoria = id_pessoa_multa
+            new_obrigacao.ValorMultaCominatoria = valor_multa
+            new_obrigacao.PeriodoMultaCominatoria = periodo_multa
             new_obrigacao.EMultaCominatoriaSolidaria = e_multa_solidaria
             new_obrigacao.SolidariosMultaCominatoria = solidarios_multa
 
@@ -233,7 +233,7 @@ if decisoes_encontradas is not None and not decisoes_encontradas.empty:
     st.subheader("Decisões encontradas")
     for i, d in st.session_state.decisoes_encontradas.iterrows():
         acordao = getattr(d, "texto_acordao", None)
-        st.text_area(label="Texto do Acórdão", value=acordao, height=400)
+        st.text_area(label="Texto do Acórdão", value=acordao, height=400, key=f"acordao_{i}")
         st.button("Extrair itens da decisão", on_click=extrair_itens, args=(d, acordao), key=f"extrair_itens_{i}")
 
 if st.session_state.get("itens_decisao"):
@@ -293,6 +293,8 @@ if st.session_state.get("itens_decisao"):
                 key=f"data_cumprimento_obr_{i}"
             )
 
+            #st.info(o)
+
             orgaos_df = get_orgaos()
             opcoes_orgaos = orgaos_df.to_dict("records")
             try:
@@ -334,16 +336,22 @@ if st.session_state.get("itens_decisao"):
 
                 valor_multa = st.number_input(
                     "Valor da Multa Cominatória", 
-                    min_value=0.0, 
-                    step=0.01, 
                     value=o.valor_multa_cominatoria if o.valor_multa_cominatoria else 0.0,
                     key=f"valor_multa_obr_{i}"
                 )
-                periodo_multa = st.text_input(
-                    "Período da Multa", 
-                    value=o.periodo_multa_cominatoria,
+
+                periodo_multa_options = ["horário", "diário", "semanal", "mensal"]
+                try:
+                    current_index = periodo_multa_options.index(o.periodo_multa_cominatoria)
+                except ValueError:
+                    current_index = 0
+
+                periodo_multa = st.selectbox(
+                    "Período da Multa",
+                    options=periodo_multa_options,
+                    index=current_index,
                     key=f"periodo_multa_obr_{i}"
-                )
+)
                 e_multa_solidaria = st.checkbox(
                     "É Multa Cominatória Solidária?", 
                     value=o.e_multa_cominatoria_solidaria,
@@ -364,6 +372,8 @@ if st.session_state.get("itens_decisao"):
                         st.error("Formato JSON inválido para 'Solidários da Multa Cominatória'.")
                         solidarios_multa = None
 
+            
+
             submitted_obr = st.form_submit_button("Salvar Obrigação")
             
             if submitted_obr:
@@ -375,8 +385,8 @@ if st.session_state.get("itens_decisao"):
                     "de_fazer": de_fazer,
                     "prazo_obrigacao": prazo,
                     "data_cumprimento_obrigacao": data_cumprimento,
-                    "orgao_responsavel_obrigacao": orgao_selecionado,
-                    "id_orgao_responsavel_obrigacao": id_orgao_selecionado,
+                    "orgao_responsavel": orgao_selecionado,
+                    "id_orgao_responsavel": id_orgao_selecionado,
                     "tem_multa_cominatoria": tem_multa_cominatoria,
                     "nome_responsavel_multa": pessoa_selecionada if tem_multa_cominatoria else None,
                     "id_pessoa_multa": id_pessoa_selecionada if tem_multa_cominatoria else None,
@@ -386,6 +396,8 @@ if st.session_state.get("itens_decisao"):
                     "solidarios_multa_cominatoria": solidarios_multa if tem_multa_cominatoria and e_multa_solidaria else None,
                 }
                 salvar_obrigacao(obr_dict)
+
+            
 
     st.subheader("Recomendações Extraídas")
     for i, r in enumerate(recomendacoes_structured):
@@ -453,11 +465,19 @@ if st.session_state.get("itens_decisao"):
                     "data_cumprimento_recomendacao": data_cumprimento_recomendacao,
                     "nome_responsavel": pessoa_selecionada['nome'],
                     "orgao_responsavel": orgao_selecionado['nome'],
-                    "id_pessoa_responsavel": pessoa_selecionada['id'], # Adicione lógica para isso se necessário
-                    "id_orgao_responsavel": orgao_selecionado['id'], # Adicione lógica para isso se necessário
+                    "id_pessoa_responsavel": id_pessoa_selecionada,
+                    "id_orgao_responsavel": id_orgao_selecionado,
                 }
                 salvar_recomendacao(rec_dict)
                 st.success("Recomendação salva com sucesso!")
+
+
+                st.session_state.pessoa_selecionada = pessoa_selecionada
+                st.session_state.orgao_selecionado = orgao_selecionado
+
+                #st.info(st.session_state.orgao_selecionado)
+                #st.info(st.session_state.pessoa_selecionada)
+
 
 st.markdown("---")
 st.subheader("Decisões salvas nessa sessão")
@@ -475,7 +495,8 @@ if obrigacoes:
             "DataCumprimento": str(ob.DataCumprimento) if ob.DataCumprimento else None,
             "TemMultaCominatoria": ob.TemMultaCominatoria,
             "ValorMultaCominatoria": ob.ValorMultaCominatoria,
-            "SolidariosMultaCominatoria": ob.SolidariosMultaCominatoria
+            "SolidariosMultaCominatoria": ob.SolidariosMultaCominatoria,
+            "OrgaoResponsavel": ob.OrgaoResponsavel
         })
 else:
     st.info("Nenhuma obrigação salva ainda.")

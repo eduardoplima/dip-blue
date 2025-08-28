@@ -202,20 +202,18 @@ class RecomendacaoORM(BaseDIP):
     
 class CancelamentoObrigacao(BaseDIP):
     __tablename__ = "CancelamentoObrigacao"
-
-    IdCancelamentoObrigacao = Column(Integer, primary_key=True, index=True)
-    IdObrigacao = Column(Integer, nullable=False)
-    MotivoCancelamento = Column(Text, nullable=False)
+    IdCancelamentoObrigacao = Column(Integer, primary_key=True)
+    IdObrigacao = Column(Integer, ForeignKey('Obrigacao.IdObrigacao'), nullable=False)
+    MotivoCancelamento = Column(String)
     DataCancelamento = Column(Date, nullable=False, default="CURRENT_TIMESTAMP")
-
+    
 class CancelamentoRecomendacao(BaseDIP):
     __tablename__ = "CancelamentoRecomendacao"
-
-    IdCancelamentoRecomendacao = Column(Integer, primary_key=True, index=True)
-    IdRecomendacao = Column(Integer, nullable=False)
-    MotivoCancelamento = Column(Text, nullable=False)
+    IdCancelamentoRecomendacao = Column(Integer, primary_key=True)
+    IdRecomendacao = Column(Integer, ForeignKey('Recomendacao.IdRecomendacao'), nullable=False)
+    MotivoCancelamento = Column(String)
     DataCancelamento = Column(Date, nullable=False, default="CURRENT_TIMESTAMP")
-
+    
 SessionLocal_DIP = sessionmaker(autocommit=False, autoflush=False, bind=engine_dip)
 SessionLocal_Processo = sessionmaker(autocommit=False, autoflush=False, bind=engine_processo)
 
